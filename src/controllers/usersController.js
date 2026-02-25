@@ -1,5 +1,6 @@
-const User = require("../modules/userModel"); // adjust path if needed
 const bcrypt = require("bcryptjs");
+const speakeasy = require("speakeasy");
+const User = require("../modules/users/userModel"); // adjust path if needed
 const jwt = require("jsonwebtoken");
 
 /* =========================
@@ -68,7 +69,7 @@ exports.login = async (req, res) => {
     /* =========================
        VALIDATE REQUEST BODY
     ========================= */
-    const { email, password } = req.body || {};
+    const { email, password, token } = req.body || {};
 
     if (!email || !password) {
       return res.status(400).json({
@@ -81,7 +82,6 @@ exports.login = async (req, res) => {
        CHECK IF USER EXISTS
     ========================= */
     const user = await User.findOne({ email });
-
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -93,7 +93,6 @@ exports.login = async (req, res) => {
        VERIFY PASSWORD
     ========================= */
     const isPasswordValid = await bcrypt.compare(password, user.password);
-
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
@@ -102,9 +101,31 @@ exports.login = async (req, res) => {
     }
 
     /* =========================
-       GENERATE TOKEN
+       VERIFY 2FA IF ENABLED
     ========================= */
-    const token = generateToken(user._id);
+    if (user.twoFactorEnabled) {
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          message: "2FA token required",
+          twoFactorRequired: true
+        });
+      }
+
+      const isTokenValid = speakeasy.totp.verify({
+        secret: user.twoFactorSecret,
+        encoding: "base32",
+        token,
+        window: 1 // allow +/- 30s drift
+      });
+
+      if (!isTokenValid) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid 2FA token"
+        });
+      }
+    }
 
     /* =========================
        SUCCESS RESPONSE
@@ -118,7 +139,7 @@ exports.login = async (req, res) => {
         email: user.email,
         phone: user.phone,
         role: user.role,
-        token
+        token: generateToken(user._id)
       }
     });
 
