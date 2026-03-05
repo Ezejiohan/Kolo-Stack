@@ -1,14 +1,19 @@
 const mongoose = require("mongoose");
-const KYC = require("../modules/kyc/kycModel");
+const KYC = require("../modules/kycModel");
 const Wallet = require("../modules/wallet/walletModel");
 const Transaction = require("../modules/transactions/transactionModel");
 const AuditLog = require("../modules/audit/auditLogModel");
+const { getOrCreateWallet } = require("../services/walletService");
 
 // Create wallet automatically if not exists
-const getOrCreateWallet = async (userId) => {
-  let wallet = await Wallet.findOne({ user: userId });
-  if (!wallet) wallet = await Wallet.create({ user: userId });
-  return wallet;
+exports.getWallet = async (req, res) => {
+  try {
+    const wallet = await getOrCreateWallet(req.user._id);
+
+    res.json(wallet);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
 // Deposit

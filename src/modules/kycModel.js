@@ -8,8 +8,8 @@ const kycSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ["pending", "approved", "rejected"],
-    default: "pending",
-  },
-});
+    default: "pending"
+  }
+}, { timestamps: true });
 
 module.exports = mongoose.model("KYC", kycSchema);

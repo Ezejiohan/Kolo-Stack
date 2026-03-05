@@ -1,7 +1,7 @@
 const User = require("../../modules/users/userModel");
 const Group = require("../../modules/groups/groupModel");
 const Transaction = require("../../modules/transactions/transactionModel");
-const KYC = require("../../modules/kyc/kycModel");
+const KYC = require("../../modules/kycModel");
 
 exports.getPlatformStats = async (req, res) => {
   const users = await User.countDocuments();

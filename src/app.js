@@ -38,11 +38,13 @@ const userRoute = require("./routes/userRoute");
 const adminRoute = require("./routes/adminRoute");
 const groupRoute = require("./routes/groupRoute");
 const walletRoute = require("./routes/walletRoute");
+const kycRoute = require("./routes/kyc/kycRoute");
 
 app.use("/api/users", userRoute);
 app.use("/api/admin", adminRoute);
 app.use("/api/groups", groupRoute);
 app.use("/api/wallet", walletRoute);
+app.use("/api/kyc", kycRoute);
 
 /* =========================
    ROOT ROUTE

@@ -30,8 +30,8 @@ exports.joinGroup = async (req, res) => {
 
     if (!group) return res.status(404).json({ message: "Group not found" });
 
-    if (group.members.includes(req.user._id))
-      return res.status(400).json({ message: "Already a member" });
+    if (group.members.some(member => member.toString() === req.user._id.toString()))
+        return res.status(400).json({ message: "Already a member" });
 
     group.members.push(req.user._id);
     await group.save();
@@ -57,13 +57,35 @@ exports.contribute = async (req, res) => {
     const group = await Group.findById(req.params.id).session(session);
     if (!group) throw new Error("Group not found");
 
+    /* =========================
+       🔥 PREVENT DOUBLE CONTRIBUTION
+    ========================= */
+    const existingContribution = await Transaction.findOne({
+      user: req.user._id,
+      group: group._id,
+      type: "contribution"
+    }).session(session);
+
+    if (existingContribution) {
+      throw new Error("You have already contributed to this group");
+    }
+
+    /* =========================
+       CHECK WALLET
+    ========================= */
     const wallet = await Wallet.findOne({ user: req.user._id }).session(session);
     if (!wallet || wallet.balance < group.contributionAmount)
       throw new Error("Insufficient funds");
 
+    /* =========================
+       DEDUCT BALANCE
+    ========================= */
     wallet.balance -= group.contributionAmount;
     await wallet.save({ session });
 
+    /* =========================
+       CREATE TRANSACTION
+    ========================= */
     await Transaction.create(
       [{
         user: req.user._id,
@@ -75,13 +97,22 @@ exports.contribute = async (req, res) => {
       { session }
     );
 
-    await AuditLog.create([{
-      user: req.user._id,
-      action: "CONTRIBUTION",
-      metadata: { groupId: group._id },
-      ipAddress: req.ip
-    }], { session });
+    /* =========================
+       AUDIT LOG
+    ========================= */
+    await AuditLog.create(
+      [{
+        user: req.user._id,
+        action: "CONTRIBUTION",
+        metadata: { groupId: group._id },
+        ipAddress: req.ip
+      }],
+      { session }
+    );
 
+    /* =========================
+       COMMIT
+    ========================= */
     await session.commitTransaction();
     session.endSession();
 
