@@ -12,6 +12,8 @@ const app = express();
 /* =========================
    BODY PARSING (FIRST)
 ========================= */
+// Webhook routes need raw body for signature verification
+app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -39,12 +41,14 @@ const adminRoute = require("./routes/adminRoute");
 const groupRoute = require("./routes/groupRoute");
 const walletRoute = require("./routes/walletRoute");
 const kycRoute = require("./routes/kyc/kycRoute");
+const paymentRoute = require("./routes/paymentRoute");
 
 app.use("/api/users", userRoute);
 app.use("/api/admin", adminRoute);
 app.use("/api/groups", groupRoute);
 app.use("/api/wallet", walletRoute);
 app.use("/api/kyc", kycRoute);
+app.use("/api/payments", paymentRoute);
 
 /* =========================
    ROOT ROUTE

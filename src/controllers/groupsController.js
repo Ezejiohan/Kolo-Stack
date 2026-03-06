@@ -86,7 +86,7 @@ exports.contribute = async (req, res) => {
     /* =========================
        CREATE TRANSACTION
     ========================= */
-    await Transaction.create(
+    const txn = await Transaction.create(
       [{
         user: req.user._id,
         type: "contribution",
@@ -96,6 +96,23 @@ exports.contribute = async (req, res) => {
       }],
       { session }
     );
+
+    /* =========================
+       RECORD CONTRIBUTION (service updates rotation counts)
+    ========================= */
+    const contributionService = require("../services/contributionService");
+    try {
+      await contributionService.recordContribution(
+        group._id,
+        req.user._id,
+        group.contributionAmount,
+        null, // no payment reference for wallet contribution
+        txn[0]._id
+      );
+    } catch (err) {
+      // log but don't fail entire transaction
+      console.error("Error recording contribution via service:", err);
+    }
 
     /* =========================
        AUDIT LOG
