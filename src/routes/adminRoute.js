@@ -1,8 +1,9 @@
 const express = require("express");
 const adminRouter = express.Router();
 const { protect, authorize } = require("../middlewares/userMiddleware");
-const { getPlatformStats } = require("../controllers/admin/adminController");
+const { getPlatformStats, makeUserAdmin } = require("../controllers/admin/adminController");
 
-adminRouter.get("/stats", protect, authorize("admin", "super_admin"), getPlatformStats);
+adminRouter.get("/stats", protect, authorize("admin"), getPlatformStats);
+adminRouter.patch("/users/:userId/make-admin", protect, makeUserAdmin);
 
 module.exports = adminRouter;

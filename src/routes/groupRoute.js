@@ -1,6 +1,6 @@
 const express = require("express");
 const groupRouter = express.Router();
-const { protect } = require("../middlewares/userMiddleware");
+const { protect, authorize } = require("../middlewares/userMiddleware");
 const {
   createGroup,
   joinGroup,
@@ -18,7 +18,7 @@ const {
   checkCycle
 } = require("../controllers/contributionsController");
 
-groupRouter.post("/", protect, createGroup);
+groupRouter.post("/", protect, authorize("admin"), createGroup);
 groupRouter.post("/:id/join", protect, joinGroup);
 groupRouter.get("/", protect, getMyGroups);
 groupRouter.post("/:id/contribute", protect, contribute);

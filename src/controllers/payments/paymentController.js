@@ -45,6 +45,21 @@ exports.initializePayment = async (req, res) => {
     if (req.body.groupId) metadata.groupId = req.body.groupId;
     if (paymentData.purpose) metadata.purpose = paymentData.purpose;
 
+    // For testing: use mock data when PAYSTACK_SECRET is not set
+    if (!process.env.PAYSTACK_SECRET) {
+      return res.json({
+        success: true,
+        data: {
+          status: true,
+          message: "Authorization URL created",
+          authorization_url: `http://localhost:5000/api/payments/verify/${reference}?mock=true`,
+          access_code: "mock_access_code",
+          reference
+        },
+        reference
+      });
+    }
+
     const response = await axios.post(
       "https://api.paystack.co/transaction/initialize",
       {
@@ -86,6 +101,77 @@ exports.verifyPayment = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Payment reference is required"
+      });
+    }
+
+    // For testing: use mock data when PAYSTACK_SECRET is not set or mock query param
+    if (!process.env.PAYSTACK_SECRET || req.query.mock === 'true') {
+      const mockData = {
+        id: 123456789,
+        reference,
+        amount: 500000, // in kobo
+        currency: "NGN",
+        status: "success",
+        paid_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        channel: "card",
+        customer: { email: req.user.email },
+        metadata: {}
+      };
+
+      // Find and update payment record
+      const payment = await Payment.findOneAndUpdate(
+        { reference },
+        {
+          status: 'success',
+          paystackData: mockData
+        },
+        { new: true }
+      );
+
+      if (!payment) {
+        return res.status(404).json({
+          success: false,
+          message: "Payment record not found"
+        });
+      }
+
+      // Create transaction record
+      if (!payment.transaction) {
+        const txnType = payment.purpose === 'contribution' ? 'contribution' : 'deposit';
+        const transaction = new Transaction({
+          user: payment.user,
+          type: txnType,
+          amount: payment.amount,
+          status: "completed",
+          group: payment.group
+        });
+        await transaction.save();
+
+        payment.transaction = transaction._id;
+        await payment.save();
+
+        // Record contribution if applicable
+        if (payment.purpose === 'contribution' && payment.group) {
+          const contributionService = require("../services/contributionService");
+          try {
+            await contributionService.recordContribution(
+              payment.group,
+              payment.user,
+              payment.amount,
+              payment._id,
+              transaction._id
+            );
+          } catch (err) {
+            console.error("Failed to record contribution:", err);
+          }
+        }
+      }
+
+      return res.json({
+        success: true,
+        data: mockData,
+        payment: payment
       });
     }
 
