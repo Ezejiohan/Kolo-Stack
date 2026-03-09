@@ -107,31 +107,23 @@ exports.withdraw = async (req, res) => {
     if (!amount || amount <= 0)
       throw new Error("Invalid withdrawal amount");
 
-    /* =========================
-       KYC CHECK
-    ========================= */
+       // KYC CHECK
     const kyc = await KYC.findOne({ user: req.user._id }).session(session);
 
     if (!kyc || kyc.status !== "approved")
       throw new Error("KYC verification required");
 
-    /* =========================
-       GET WALLET
-    ========================= */
+       //GET WALLET
     const wallet = await Wallet.findOne({ user: req.user._id }).session(session);
 
     if (!wallet || wallet.balance < amount)
       throw new Error("Insufficient balance");
 
-    /* =========================
-       DEDUCT BALANCE
-    ========================= */
+       //DEDUCT BALANCE
     wallet.balance -= amount;
     await wallet.save({ session });
 
-    /* =========================
-       CREATE TRANSACTION RECORD
-    ========================= */
+      // CREATE TRANSACTION RECORD
     await Transaction.create(
       [{
         user: req.user._id,
@@ -142,9 +134,7 @@ exports.withdraw = async (req, res) => {
       { session }
     );
 
-    /* =========================
-       ✅ AUDIT LOG (INSIDE SAME TRANSACTION)
-    ========================= */
+       // AUDIT LOG (INSIDE SAME TRANSACTION)
     await AuditLog.create(
       [{
         user: req.user._id,
@@ -155,9 +145,7 @@ exports.withdraw = async (req, res) => {
       { session }
     );
 
-    /* =========================
-       COMMIT
-    ========================= */
+       // COMMIT
     await session.commitTransaction();
     session.endSession();
 

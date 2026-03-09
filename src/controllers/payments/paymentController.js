@@ -264,13 +264,6 @@ exports.handleWebhook = async (req, res) => {
     // Parse the raw body
     const event = JSON.parse(req.body);
 
-    // In production, verify webhook signature
-    // const secret = process.env.PAYSTACK_SECRET;
-    // const hash = crypto.createHmac('sha512', secret).update(req.body).digest('hex');
-    // if (hash !== req.headers['x-paystack-signature']) {
-    //   return res.status(400).send('Invalid signature');
-    // }
-
     if (event.event === 'charge.success') {
       const { reference, amount, customer } = event.data;
 
@@ -321,6 +314,7 @@ exports.handleWebhook = async (req, res) => {
     res.sendStatus(500);
   }
 };
+
 exports.getPaymentHistory = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;

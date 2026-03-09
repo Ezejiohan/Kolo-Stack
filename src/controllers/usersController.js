@@ -3,9 +3,7 @@ const speakeasy = require("speakeasy");
 const User = require("../modules/users/userModel"); // adjust path if needed
 const jwt = require("jsonwebtoken");
 
-/* =========================
-   Generate JWT Token
-========================= */
+   // Generate JWT Token
 const generateToken = (id) => {
   return jwt.sign(
     { id },
@@ -14,9 +12,7 @@ const generateToken = (id) => {
   );
 };
 
-/* =========================
-   Register User
-========================= */
+   // Register User
 exports.register = async (req, res) => {
   try {
     const { fullname, email, phone, password } = req.body;
@@ -61,14 +57,10 @@ exports.register = async (req, res) => {
   }
 };
 
-/* =========================
-   Login User
-========================= */
+   // Login User
 exports.login = async (req, res) => {
   try {
-    /* =========================
-       VALIDATE REQUEST BODY
-    ========================= */
+       // VALIDATE REQUEST BODY
     const { email, password, token } = req.body || {};
 
     if (!email || !password) {
@@ -78,9 +70,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    /* =========================
-       CHECK IF USER EXISTS
-    ========================= */
+       // CHECK IF USER EXISTS
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({
@@ -89,9 +79,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    /* =========================
-       VERIFY PASSWORD
-    ========================= */
+       // VERIFY PASSWORD
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -100,9 +88,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    /* =========================
-       VERIFY 2FA IF ENABLED
-    ========================= */
+       // VERIFY 2FA IF ENABLED
     if (user.twoFactorEnabled) {
       if (!token) {
         return res.status(401).json({
@@ -127,9 +113,7 @@ exports.login = async (req, res) => {
       }
     }
 
-    /* =========================
-       SUCCESS RESPONSE
-    ========================= */
+       // SUCCESS RESPONSE
     return res.status(200).json({
       success: true,
       message: "Login successful",

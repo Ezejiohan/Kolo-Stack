@@ -57,9 +57,7 @@ exports.contribute = async (req, res) => {
     const group = await Group.findById(req.params.id).session(session);
     if (!group) throw new Error("Group not found");
 
-    /* =========================
-       🔥 PREVENT DOUBLE CONTRIBUTION
-    ========================= */
+       //PREVENT DOUBLE CONTRIBUTION
     const existingContribution = await Transaction.findOne({
       user: req.user._id,
       group: group._id,
@@ -70,22 +68,16 @@ exports.contribute = async (req, res) => {
       throw new Error("You have already contributed to this group");
     }
 
-    /* =========================
-       CHECK WALLET
-    ========================= */
+       // CHECK WALLET
     const wallet = await Wallet.findOne({ user: req.user._id }).session(session);
     if (!wallet || wallet.balance < group.contributionAmount)
       throw new Error("Insufficient funds");
 
-    /* =========================
-       DEDUCT BALANCE
-    ========================= */
+      // DEDUCT BALANCE
     wallet.balance -= group.contributionAmount;
     await wallet.save({ session });
 
-    /* =========================
-       CREATE TRANSACTION
-    ========================= */
+       // CREATE TRANSACTION
     const txn = await Transaction.create(
       [{
         user: req.user._id,
@@ -97,9 +89,7 @@ exports.contribute = async (req, res) => {
       { session }
     );
 
-    /* =========================
-       RECORD CONTRIBUTION (service updates rotation counts)
-    ========================= */
+       //RECORD CONTRIBUTION (service updates rotation counts)
     const contributionService = require("../services/contributionService");
     try {
       await contributionService.recordContribution(
@@ -114,9 +104,7 @@ exports.contribute = async (req, res) => {
       console.error("Error recording contribution via service:", err);
     }
 
-    /* =========================
-       AUDIT LOG
-    ========================= */
+       // AUDIT LOG
     await AuditLog.create(
       [{
         user: req.user._id,
@@ -127,9 +115,7 @@ exports.contribute = async (req, res) => {
       { session }
     );
 
-    /* =========================
-       COMMIT
-    ========================= */
+       // COMMIT
     await session.commitTransaction();
     session.endSession();
 

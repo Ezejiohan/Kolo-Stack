@@ -1,9 +1,7 @@
 const jwt = require("jsonwebtoken");
 const User = require("../modules/users/userModel");
 
-/* =========================
-   PROTECT ROUTES (AUTH)
-========================= */
+  // PROTECT ROUTES (AUTH)
 const protect = async (req, res, next) => {
   let token;
 
@@ -40,9 +38,7 @@ const protect = async (req, res, next) => {
   }
 };
 
-/* =========================
-   AUTHORIZE ROLES
-========================= */
+  // AUTHORIZE ROLE
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
