@@ -31,6 +31,14 @@ exports.initializeCycle = async (req, res) => {
 exports.recordContribution = async (req, res) => {
   try {
     const { groupId } = req.params;
+    
+    if (!req.body || !req.body.amount) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Missing required fields: amount, paymentReference, transactionId" 
+      });
+    }
+
     const { amount, paymentReference, transactionId } = req.body;
 
     const contribution = await contributionService.recordContribution(
@@ -90,6 +98,14 @@ exports.getNextRecipient = async (req, res) => {
 exports.completeCycle = async (req, res) => {
   try {
     const { cycleId } = req.params;
+    
+    if (!req.body || !req.body.payoutReference) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Missing required field: payoutReference" 
+      });
+    }
+
     const { payoutReference } = req.body;
 
     // ensure owner of the group is performing this
