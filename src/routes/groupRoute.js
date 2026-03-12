@@ -5,7 +5,9 @@ const {
   createGroup,
   joinGroup,
   getMyGroups,
-  contribute
+  contribute,
+  sendInvite,
+  acceptInvite
 } = require("../controllers/groupsController");
 
 const {
@@ -22,6 +24,12 @@ groupRouter.post("/", protect, authorize("admin"), createGroup);
 groupRouter.post("/:id/join", protect, joinGroup);
 groupRouter.get("/", protect, getMyGroups);
 groupRouter.post("/:id/contribute", protect, contribute);
+
+// invite system
+// owner can send invite to an email address
+groupRouter.post("/:id/invite", protect, sendInvite);
+// user accepts invite (must be authenticated)
+groupRouter.post("/invite/accept/:token", protect, acceptInvite);
 
 // contribution/rotation management
 // only group owner should initialize cycle

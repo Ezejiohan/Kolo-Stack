@@ -73,6 +73,10 @@ You can hit the endpoints directly using this base URL.
    # Server
    PORT=5000
    NODE_ENV=development
+
+   # Email (Gmail)
+   GMAIL_USER=your@gmail.com
+   GMAIL_PASS=your-gmail-app-password (or OAuth token)
    ```
 
 4. **Start MongoDB**

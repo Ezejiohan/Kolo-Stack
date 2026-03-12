@@ -1,11 +1,13 @@
 const contributionService = require("../services/contributionService");
 const Group = require("../modules/groups/groupModel");
+const User = require("../modules/users/userModel");
+const { sendMail } = require("../utils/mailer");
 
 // initialize a new rotation cycle for a group (owner only)
 exports.initializeCycle = async (req, res) => {
   try {
     const groupId = req.params.groupId;
-    const group = await Group.findById(groupId);
+    const group = await Group.findById(groupId).populate('members');
     if (!group) return res.status(404).json({ success: false, message: "Group not found" });
     if (group.owner.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: "Only the group owner can start a cycle" });
@@ -20,6 +22,21 @@ exports.initializeCycle = async (req, res) => {
     const nextCycle = latestCycle ? latestCycle.cycleNumber + 1 : 1;
 
     const cycle = await contributionService.initializeRotationCycle(groupId, nextCycle);
+
+    // notify members about new cycle
+    try {
+      const emails = group.members.map(m => m.email).filter(Boolean);
+      if (emails.length) {
+        await sendMail({
+          to: emails.join(","),
+          subject: `New cycle ${nextCycle} started in group ${group.name}`,
+          text: `A new contribution cycle (#${nextCycle}) has been initialized. Please make your payments.`
+        });
+      }
+    } catch (err) {
+      console.error("Error sending cycle start emails:", err);
+    }
+
     res.status(201).json({ success: true, cycle });
   } catch (error) {
     console.error(error);
@@ -48,6 +65,17 @@ exports.recordContribution = async (req, res) => {
       paymentReference,
       transactionId
     );
+
+    // send receipt
+    try {
+      await sendMail({
+        to: req.user.email,
+        subject: "Contribution received",
+        text: `Your contribution of ${amount} for group ${groupId} has been recorded.`
+      });
+    } catch (err) {
+      console.error("Failed to send contribution email:", err);
+    }
 
     res.json({ success: true, contribution });
   } catch (error) {
@@ -117,6 +145,30 @@ exports.completeCycle = async (req, res) => {
     }
 
     const updated = await contributionService.completeRotationCycle(cycleId, payoutReference);
+
+    // notify group members and recipient
+    try {
+      const group = await Group.findById(cycle.group._id).populate("members");
+      const recipient = await User.findById(updated.recipient);
+      const emails = group.members.map(m => m.email).filter(Boolean);
+      if (emails.length) {
+        await sendMail({
+          to: emails.join(","),
+          subject: `Cycle ${cycle.cycleNumber} completed for group ${group.name}`,
+          text: `The cycle has been marked complete. Payout reference: ${payoutReference}`
+        });
+      }
+      if (recipient && recipient.email) {
+        await sendMail({
+          to: recipient.email,
+          subject: "You have received a payout",
+          text: `You are the recipient for cycle ${cycle.cycleNumber} of group ${group.name}.` 
+        });
+      }
+    } catch (err) {
+      console.error("Error sending completion emails:", err);
+    }
+
     res.json({ success: true, cycle: updated });
   } catch (error) {
     console.error(error);

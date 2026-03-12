@@ -1,4 +1,5 @@
 const KYC = require("../../modules/kycModel");
+const { sendMail } = require("../../utils/mailer");
 
 exports.submitKYC = async (req, res) => {
   try {
@@ -15,6 +16,17 @@ exports.submitKYC = async (req, res) => {
       user: req.user._id,
       status: "approved" // ⚠️ change to "pending" in production
     });
+
+    // send confirmation email
+    try {
+      await sendMail({
+        to: req.user.email,
+        subject: "KYC submission received",
+        text: "Your KYC information has been submitted and is under review."
+      });
+    } catch (err) {
+      console.error("Failed to send KYC email:", err);
+    }
 
     res.status(201).json({
       success: true,
