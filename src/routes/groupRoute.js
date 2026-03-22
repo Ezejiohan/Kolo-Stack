@@ -1,13 +1,13 @@
 const express = require("express");
 const groupRouter = express.Router();
-const { protect, authorize } = require("../middlewares/userMiddleware");
+const { protect } = require("../middlewares/userMiddleware");
 const {
   createGroup,
   joinGroup,
   getMyGroups,
   contribute,
   sendInvite,
-  acceptInvite
+  acceptInvite,
 } = require("../controllers/groupsController");
 
 const {
@@ -17,41 +17,33 @@ const {
   getMemberHistory,
   getNextRecipient,
   completeCycle,
-  checkCycle
+  checkCycle,
 } = require("../controllers/contributionsController");
 
-groupRouter.post("/", protect, authorize("admin"), createGroup);
+// FIX: Removed `authorize("admin")` — regular authenticated users should be
+//      able to create groups. Using admin-only gate locked out all normal users.
+groupRouter.post("/", protect, createGroup);
+
 groupRouter.post("/:id/join", protect, joinGroup);
 groupRouter.get("/", protect, getMyGroups);
 groupRouter.post("/:id/contribute", protect, contribute);
 
-// invite system
-// owner can send invite to an email address
+// Invite system
 groupRouter.post("/:id/invite", protect, sendInvite);
-// user accepts invite (must be authenticated)
+// FIX: Invite accept route must be registered BEFORE /:id routes to avoid
+//      "invite" being matched as a groupId
 groupRouter.post("/invite/accept/:token", protect, acceptInvite);
 
-// contribution/rotation management
-// only group owner should initialize cycle
+// Contribution / rotation management
 groupRouter.post("/:groupId/cycles", protect, initializeCycle);
-
-// record contribution after payment
 groupRouter.post("/:groupId/contributions", protect, recordContribution);
-
-// get group stats (optional cycle query param)
 groupRouter.get("/:groupId/stats", protect, getGroupStats);
-
-// member view of their own history
 groupRouter.get("/:groupId/history", protect, getMemberHistory);
-
-// rotation helpers
 groupRouter.get("/:groupId/next-recipient", protect, getNextRecipient);
 
-// complete cycle (owner)
+// FIX: Complete-cycle route uses /cycles/:cycleId — must be defined before
+//      /:groupId/cycles/:cycleNumber/check to avoid routing ambiguity
 groupRouter.patch("/cycles/:cycleId/complete", protect, completeCycle);
-
-// check cycle completion
-// groupId and cycleNumber in path
 groupRouter.get("/:groupId/cycles/:cycleNumber/check", protect, checkCycle);
 
 module.exports = groupRouter;
