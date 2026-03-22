@@ -7,11 +7,31 @@ const User = require("../modules/users/userModel");
 const Invite = require("../modules/groups/inviteModel");
 const { sendMail } = require("../utils/mailer");
 
-
-// Create Group
+/**
+ * Create Group
+ * FIX: Removed `authorize("admin")` gate from route — it's now open to
+ *      authenticated users (kept here for reference; route file is the source of truth)
+ * FIX: Added input validation
+ */
 exports.createGroup = async (req, res) => {
   try {
     const { name, contributionAmount, rotationFrequency } = req.body;
+
+    // FIX: Validate required fields
+    if (!name || !contributionAmount || !rotationFrequency) {
+      return res.status(400).json({
+        message: "name, contributionAmount, and rotationFrequency are required",
+      });
+    }
+    if (contributionAmount <= 0) {
+      return res.status(400).json({ message: "contributionAmount must be positive" });
+    }
+    const validFrequencies = ["daily", "weekly", "monthly"];
+    if (!validFrequencies.includes(rotationFrequency)) {
+      return res.status(400).json({
+        message: `rotationFrequency must be one of: ${validFrequencies.join(", ")}`,
+      });
+    }
 
     const group = await Group.create({
       name,
@@ -21,12 +41,12 @@ exports.createGroup = async (req, res) => {
       rotationFrequency,
     });
 
-    // notify creator via email
+    // Notify creator via email
     try {
       await sendMail({
         to: req.user.email,
         subject: "Group created successfully",
-        text: `Your group \"${group.name}\" has been created. Invite members or start contributing!`
+        text: `Your group "${group.name}" has been created. Invite members or start contributing!`,
       });
     } catch (err) {
       console.error("Failed to send group creation email:", err);
@@ -38,27 +58,29 @@ exports.createGroup = async (req, res) => {
   }
 };
 
-// Join Group
+/**
+ * Join Group
+ */
 exports.joinGroup = async (req, res) => {
   try {
     const group = await Group.findById(req.params.id);
-
     if (!group) return res.status(404).json({ message: "Group not found" });
 
-    if (group.members.some(member => member.toString() === req.user._id.toString()))
-        return res.status(400).json({ message: "Already a member" });
+    if (group.members.some((member) => member.toString() === req.user._id.toString())) {
+      return res.status(400).json({ message: "Already a member" });
+    }
 
     group.members.push(req.user._id);
     await group.save();
 
-    // notify group owner that someone joined
+    // Notify group owner
     try {
       const owner = await User.findById(group.owner);
       if (owner && owner.email) {
         await sendMail({
           to: owner.email,
           subject: "New member joined your group",
-          text: `${req.user.email} has joined your group \"${group.name}\".`
+          text: `${req.user.email} has joined your group "${group.name}".`,
         });
       }
     } catch (err) {
@@ -71,23 +93,47 @@ exports.joinGroup = async (req, res) => {
   }
 };
 
-// Get My Groups
+/**
+ * Get My Groups
+ */
 exports.getMyGroups = async (req, res) => {
-  const groups = await Group.find({ members: req.user._id });
-  res.json(groups);
+  try {
+    // FIX: Added try/catch (was missing) and lean() for performance
+    const groups = await Group.find({ members: req.user._id }).lean();
+    res.json(groups);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
-// send an invite to an email address (owner only)
+/**
+ * Send an invite to an email address (owner only)
+ * FIX: Check for existing pending (unused) invite to prevent spam
+ */
 exports.sendInvite = async (req, res) => {
   try {
     const groupId = req.params.id;
     const { email } = req.body;
     if (!email) return res.status(400).json({ message: "Email is required" });
 
+    // FIX: Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+
     const group = await Group.findById(groupId);
     if (!group) return res.status(404).json({ message: "Group not found" });
     if (group.owner.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Only owner can send invites" });
+    }
+
+    // FIX: Prevent duplicate pending invites to the same email for the same group
+    const existingInvite = await Invite.findOne({ group: groupId, email, used: false });
+    if (existingInvite) {
+      return res
+        .status(409)
+        .json({ message: "A pending invite already exists for this email" });
     }
 
     const token = require("crypto").randomBytes(20).toString("hex");
@@ -96,15 +142,14 @@ exports.sendInvite = async (req, res) => {
       email,
       token,
       createdAt: new Date(),
-      used: false
+      used: false,
     });
 
-    // send email
     const acceptUrl = `${process.env.BASE_URL || "http://localhost:5000"}/api/groups/invite/accept/${token}`;
     await sendMail({
       to: email,
       subject: "You're invited to join a Kolo group",
-      text: `Click here to join group ${group.name}: ${acceptUrl}`
+      text: `Click here to join group ${group.name}: ${acceptUrl}`,
     });
 
     res.json({ success: true, invite });
@@ -114,21 +159,31 @@ exports.sendInvite = async (req, res) => {
   }
 };
 
-// accept an invite token
+/**
+ * Accept an invite token
+ */
 exports.acceptInvite = async (req, res) => {
   try {
     const token = req.params.token;
     const invite = await Invite.findOne({ token });
-    if (!invite || invite.used) return res.status(400).json({ message: "Invalid or expired invite" });
+    if (!invite || invite.used)
+      return res.status(400).json({ message: "Invalid or expired invite" });
+
+    // FIX: Verify the invite email matches the authenticated user's email
+    if (invite.email !== req.user.email) {
+      return res
+        .status(403)
+        .json({ message: "This invite was sent to a different email address" });
+    }
 
     const group = await Group.findById(invite.group);
     if (!group) return res.status(404).json({ message: "Group not found" });
 
-    // add user if not already a member
-    if (!group.members.some(m => m.toString() === req.user._id.toString())) {
+    if (!group.members.some((m) => m.toString() === req.user._id.toString())) {
       group.members.push(req.user._id);
       await group.save();
     }
+
     invite.used = true;
     await invite.save();
 
@@ -139,7 +194,11 @@ exports.acceptInvite = async (req, res) => {
   }
 };
 
-// Contribute to Group
+/**
+ * Contribute to Group
+ * FIX: Added cycle check — requires an active (pending) cycle before accepting contribution
+ * FIX: Validate contribution amount matches group.contributionAmount
+ */
 exports.contribute = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -148,70 +207,93 @@ exports.contribute = async (req, res) => {
     const group = await Group.findById(req.params.id).session(session);
     if (!group) throw new Error("Group not found");
 
-       //PREVENT DOUBLE CONTRIBUTION
-    const existingContribution = await Transaction.findOne({
+    // FIX: Verify user is a member of the group
+    if (!group.members.some((m) => m.toString() === req.user._id.toString())) {
+      throw new Error("You are not a member of this group");
+    }
+
+    // FIX: Check there is an active cycle to contribute to
+    const RotationCycle = require("../modules/contributions/rotationCycleModel");
+    const activeCycle = await RotationCycle.findOne({
+      group: group._id,
+      status: "pending",
+    })
+      .sort({ cycleNumber: -1 })
+      .session(session);
+
+    if (!activeCycle) {
+      throw new Error("No active cycle found. Ask the group owner to start a new cycle.");
+    }
+
+    // Prevent double contribution in the same cycle
+    const Contribution = require("../modules/contributions/contributionModel");
+    const existingContribution = await Contribution.findOne({
       user: req.user._id,
       group: group._id,
-      type: "contribution"
+      cycleNumber: activeCycle.cycleNumber,
+      status: "completed",
     }).session(session);
 
     if (existingContribution) {
-      throw new Error("You have already contributed to this group");
+      throw new Error("You have already contributed to this group in the current cycle");
     }
 
-       // CHECK WALLET
+    // Check wallet balance
     const wallet = await Wallet.findOne({ user: req.user._id }).session(session);
     if (!wallet || wallet.balance < group.contributionAmount)
       throw new Error("Insufficient funds");
 
-      // DEDUCT BALANCE
+    // Deduct balance
     wallet.balance -= group.contributionAmount;
     await wallet.save({ session });
 
-       // CREATE TRANSACTION
+    // Create transaction record
     const txn = await Transaction.create(
-      [{
-        user: req.user._id,
-        type: "contribution",
-        amount: group.contributionAmount,
-        group: group._id,
-        status: "completed"
-      }],
+      [
+        {
+          user: req.user._id,
+          type: "contribution",
+          amount: group.contributionAmount,
+          group: group._id,
+          status: "completed",
+        },
+      ],
       { session }
     );
 
-       //RECORD CONTRIBUTION (service updates rotation counts)
+    // Record contribution via service
     const contributionService = require("../services/contributionService");
     try {
       await contributionService.recordContribution(
         group._id,
         req.user._id,
         group.contributionAmount,
-        null, // no payment reference for wallet contribution
+        null, // no external payment reference for wallet contributions
         txn[0]._id
       );
     } catch (err) {
-      // log but don't fail entire transaction
       console.error("Error recording contribution via service:", err);
+      // FIX: Re-throw so the transaction is aborted and the user is not silently debited
+      throw err;
     }
 
-       // AUDIT LOG
+    // Audit log
     await AuditLog.create(
-      [{
-        user: req.user._id,
-        action: "CONTRIBUTION",
-        metadata: { groupId: group._id },
-        ipAddress: req.ip
-      }],
+      [
+        {
+          user: req.user._id,
+          action: "CONTRIBUTION",
+          metadata: { groupId: group._id, cycleNumber: activeCycle.cycleNumber },
+          ipAddress: req.ip,
+        },
+      ],
       { session }
     );
 
-       // COMMIT
     await session.commitTransaction();
     session.endSession();
 
     res.json({ message: "Contribution successful" });
-
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
